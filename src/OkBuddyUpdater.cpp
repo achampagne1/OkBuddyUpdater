@@ -1,8 +1,11 @@
 ﻿#include "OkBuddyUpdater.h"
 #include <curl/curl.h>
+#include <vector>
 
 enum FLAGS{
-	VERBOSE = 'v'
+	DASH 	= 0,
+	VERBOSE = 1,
+	TEST 	= 2
 };
 
 static size_t writeCb(char* ptr, size_t size, size_t nmemb, void* stream)
@@ -18,47 +21,92 @@ static size_t writeString(char* ptr, size_t size, size_t nmemb, void* stream)
 	return size * nmemb;
 }
 
-int main(int argc, char* argv[])
-{
-	CURLcode result;
-	CURL* curl;
-	std::string url = "";
-	char* flags = nullptr;
-	int flagLength = 0;
-	char verboseFlag = 0;
-
-	if (argc == 1) {
-		std::cout << "No arguments provided." << std::endl;
-		return 1;
-	}
-	else if (argc == 2) {
-		url = argv[1];
-	}
-	else if (argc == 3) {
-		if(argv[1][0] != '-'){
-			std::cout<< "Invalid argument format. Expected a flag starting with '-'." << std::endl;
-		}
-		else if(argv[1][0] == '-' && strlen(argv[1]) < 2){
-			std::cout<< "Invalid argument format. Flag must contain at least one character after '-'." << std::endl;
-		}
-		else{
-			flags = argv[1];
-			flagLength = strlen(flags);
-		}
-		url = argv[2];
-	}
-
-	while(flags != nullptr && *flags != '\0'){
+static uint32_t parseFlags(char* flags){
+	uint32_t outMask = 0;
+	while(*flags != '\0'){
 		switch(*flags){
-			case FLAGS::VERBOSE:
-				verboseFlag = 1;
+			case 'v':
 				std::cout << "Verbose mode enabled." << std::endl;
+				outMask |= FLAGS::VERBOSE;
+				break;
+			case '-':
+				outMask |= FLAGS::DASH; //does nothing
+				break;
+			case 't':
+				std::cout << "Test mode enabled." << std::endl;
+				outMask |= FLAGS::TEST;
 				break;
 			default:
 				std::cout << "Unknown flag: " << *flags << std::endl;
 				break;
 		}
 		flags++;
+	}
+	return outMask;
+}
+
+static std::vector<std::string>* parseIgnore(char* ignores){
+	//example: ignore:[file1.txt,file2.txt]
+	std::vector<std::string>* ignoreList = new std::vector<std::string>();
+	while(*ignores != '[' && *ignores != '\0'){
+		if(*ignores == '\0'){
+			std::cout << "Invalid ignore list." << std::endl;
+			return ignoreList;
+		}
+		ignores++;
+	}
+	ignores++;
+
+	while(*ignores != ']' && *ignores != '\0'){
+		std::string ignoreStr = "";
+		while(*ignores != ',' && *ignores != '\0' && *ignores != ']'){
+			ignoreStr += *ignores;
+			ignores++;
+		}
+		if(*ignores == ','){
+			ignores++;
+		}
+		if(!ignoreStr.empty()){
+			ignoreList->push_back(ignoreStr);
+		}
+	}
+	return ignoreList;
+}
+
+int main(int argc, char* argv[])
+{
+	uint32_t flagMask = 0;
+	CURLcode result;
+	CURL* curl;
+	std::string url = "";
+	std::vector<std::string>* ignoreList;
+
+	if (argc == 1) {
+		std::cout << "No arguments provided." << std::endl;
+		return 1;
+	}
+	
+	int count = 1;
+	while (count < argc) {
+		if (argv[count][0] == '-') {
+			flagMask = parseFlags(argv[count]);
+		} 
+		else if(((std::string)argv[count]).substr(0, 6) == "ignore"){
+			ignoreList = parseIgnore(argv[count]);
+		}
+		else {
+			url = argv[count];
+		}
+		count++;
+	}
+
+	for(std::string ignore : *ignoreList){
+		std::cout << "Ignoring: " << ignore << std::endl;
+	}
+
+	if(url.empty()){
+		std::cout << "No URL provided." << std::endl;
+		return 1;
 	}
 
 	result = curl_global_init(CURL_GLOBAL_ALL);
@@ -74,7 +122,7 @@ int main(int argc, char* argv[])
         std::string signedUrl = "";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-		if(verboseFlag){
+		if(flagMask & FLAGS::VERBOSE){
         	curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
         	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 		}
@@ -92,6 +140,8 @@ int main(int argc, char* argv[])
         fclose(pagefile);
         curl_easy_cleanup(curl);
     }
+
+	delete ignoreList;
 
 	return 0;
 }
