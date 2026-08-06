@@ -48,22 +48,22 @@ static uint32_t parseFlags(char* flags){
 static std::vector<std::string>* parseIgnore(char* ignores){
 	//example: ignore:[file1.txt,file2.txt]
 	std::vector<std::string>* ignoreList = new std::vector<std::string>();
-	while(*ignores != '[' && *ignores != '\0'){
+	while(*ignores != '=' && *ignores != ' '){ //up to equal sign and trim leading spaces
 		if(*ignores == '\0'){
 			std::cout << "Invalid ignore list." << std::endl;
 			return ignoreList;
 		}
 		ignores++;
 	}
-	ignores++;
+	ignores++; //first char
 
-	while(*ignores != ']' && *ignores != '\0'){
+	while(*ignores != '\0'){
 		std::string ignoreStr = "";
-		while(*ignores != ',' && *ignores != '\0' && *ignores != ']'){
+		while(*ignores != ',' && *ignores != ' ' && *ignores != '\0'){
 			ignoreStr += *ignores;
 			ignores++;
 		}
-		if(*ignores == ','){
+		while(*ignores == ','||*ignores == ' '){//skip until you reach next name
 			ignores++;
 		}
 		if(!ignoreStr.empty()){
@@ -101,7 +101,7 @@ int main(int argc, char* argv[])
 	}
 
 	for(std::string ignore : *ignoreList){
-		std::cout << "Ignoring: " << ignore << std::endl;
+		std::cout << "Ignoring: " << ignore <<"."<< std::endl;
 	}
 
 	if(url.empty()){
