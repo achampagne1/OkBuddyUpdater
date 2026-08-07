@@ -1,11 +1,18 @@
 ﻿#include "OkBuddyUpdater.h"
 #include <curl/curl.h>
+#include <string>
 #include <vector>
+#include <archive.h>
+#include <archive_entry.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 enum FLAGS{
-	DASH 	= 0,
-	VERBOSE = 1,
-	TEST 	= 2
+	DASH 	= 0x0,
+	VERBOSE = 0x1,
+	TEST 	= 0x2
 };
 
 static size_t writeCb(char* ptr, size_t size, size_t nmemb, void* stream)
@@ -45,32 +52,36 @@ static uint32_t parseFlags(char* flags){
 	return outMask;
 }
 
-static std::vector<std::string>* parseIgnore(char* ignores){
-	//example: ignore:[file1.txt,file2.txt]
-	std::vector<std::string>* ignoreList = new std::vector<std::string>();
-	while(*ignores != '=' && *ignores != ' '){ //up to equal sign and trim leading spaces
-		if(*ignores == '\0'){
-			std::cout << "Invalid ignore list." << std::endl;
-			return ignoreList;
+static std::vector<std::string>* parseArgList(char* args){
+	//example: ignore="file1.txt,file2.txt"
+	//         kill="1012,1023"
+	std::vector<std::string>* argList = new std::vector<std::string>();
+	while(*args != '='){ //go up to =
+		if(*args == '\0'){
+			std::cout << "Invalid argument list." << std::endl;
+			return argList;
 		}
-		ignores++;
+		args++;
 	}
-	ignores++; //first char
+	args++; //first char
 
-	while(*ignores != '\0'){
-		std::string ignoreStr = "";
-		while(*ignores != ',' && *ignores != ' ' && *ignores != '\0'){
-			ignoreStr += *ignores;
-			ignores++;
+	while(*args != '\0'){
+		std::string argStr = "";
+		while(*args != ',' && *args != '\0'){ //go up to comma or end of string
+			if(*args != ' '){ //ignore all spaces
+				argStr += *args;
+			}
+			args++;
 		}
-		while(*ignores == ','||*ignores == ' '){//skip until you reach next name
-			ignores++;
+		if(*args == ','){
+			args++; //skip comma
 		}
-		if(!ignoreStr.empty()){
-			ignoreList->push_back(ignoreStr);
+
+		if(!argStr.empty()){
+			argList->push_back(argStr);
 		}
 	}
-	return ignoreList;
+	return argList;
 }
 
 int main(int argc, char* argv[])
@@ -80,6 +91,7 @@ int main(int argc, char* argv[])
 	CURL* curl;
 	std::string url = "";
 	std::vector<std::string>* ignoreList;
+	std::vector<std::string>* killList;
 
 	if (argc == 1) {
 		std::cout << "No arguments provided." << std::endl;
@@ -92,21 +104,34 @@ int main(int argc, char* argv[])
 			flagMask = parseFlags(argv[count]);
 		} 
 		else if(((std::string)argv[count]).substr(0, 6) == "ignore"){
-			ignoreList = parseIgnore(argv[count]);
+			ignoreList = parseArgList(argv[count]);
 		}
-		else {
+		else if(((std::string)argv[count]).substr(0, 4) == "kill"){
+			killList = parseArgList(argv[count]);
+		}
+		else { 
 			url = argv[count];
 		}
 		count++;
 	}
 
-	for(std::string ignore : *ignoreList){
-		std::cout << "Ignoring: " << ignore <<"."<< std::endl;
-	}
-
 	if(url.empty()){
 		std::cout << "No URL provided." << std::endl;
 		return 1;
+	}
+
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout<<"Files to ignore:" << std::endl;
+		for(std::string ignore : *ignoreList){
+			std::cout << "\t" << ignore<< std::endl;
+		}
+	}
+
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout<<"Processes to kill:" << std::endl;
+		for(std::string kill : *killList){
+			std::cout << "\t" << kill<< std::endl;
+		}
 	}
 
 	result = curl_global_init(CURL_GLOBAL_ALL);
@@ -118,7 +143,7 @@ int main(int argc, char* argv[])
 	curl = curl_easy_init();
     if (curl) {
         FILE* pagefile;
-        pagefile = fopen("switchTrack.zip", "wb");
+        pagefile = fopen("tempUpdateDirectory", "wb");
         std::string signedUrl = "";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -140,8 +165,35 @@ int main(int argc, char* argv[])
         fclose(pagefile);
         curl_easy_cleanup(curl);
     }
+	else {
+		std::cout << "Failed to initialize curl." << std::endl;
+		return 1;
+	}
+
+	for(std::string pid : *killList){
+		#ifdef _WIN32
+		HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, std::stoi(pid));
+		if (hProcess == NULL) {
+			std::cout << "Failed to open process with PID " << pid << std::endl;
+			continue;
+		}
+		if (!TerminateProcess(hProcess, 0)) {
+			std::cout << "Failed to terminate process with PID " << pid << std::endl;
+		} else {
+			std::cout << "Terminated process with PID " << pid << std::endl;
+		}
+		CloseHandle(hProcess);
+		#elif __linux__
+		if (kill(std::stoi(pid), SIGTERM) != 0) {
+			std::cout << "Failed to terminate process with PID " << pid << std::endl;
+		} else {
+			std::cout << "Terminated process with PID " << pid << std::endl;
+		}
+		#endif
+	}
 
 	delete ignoreList;
+	delete killList;
 
 	return 0;
 }
