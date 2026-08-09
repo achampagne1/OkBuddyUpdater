@@ -15,10 +15,10 @@ find_package(CURL REQUIRED)
 find_package(Libarchive REQUIRED)
 
 # Add source to this project's executable.
-add_executable (OkBuddyUpdater "src/OkBuddyUpdater.cpp" "src/OkBuddyUpdater.h")
-target_link_libraries(OkBuddyUpdater PRIVATE CURL::libcurl LibArchive::LibArchive)
+add_executable (okbdupdater "src/OkBuddyUpdater.cpp" "src/OkBuddyUpdater.h")
+target_link_libraries(okbdupdater PRIVATE CURL::libcurl LibArchive::LibArchive)
 if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET OkBuddyUpdater PROPERTY CXX_STANDARD 20)
+  set_property(TARGET okbdupdater PROPERTY CXX_STANDARD 20)
 endif()
 
 # TODO: Add tests and install targets if needed.
