@@ -6,6 +6,7 @@
 #include <archive_entry.h>
 #include <filesystem>
 #include <unordered_map>
+#include <algorithm>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -187,6 +188,7 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 		}
 	}
 
+	std::vector<fs::path> entriesToRemove;
 	for (auto itEntry = fs::recursive_directory_iterator(sourcePath); itEntry != fs::recursive_directory_iterator(); ++itEntry) {
 		const fs::path entryPath = itEntry->path();
 		const std::string filenameStr = entryPath.filename().string();
@@ -198,11 +200,23 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 			continue;
 		}
 
+		entriesToRemove.push_back(entryPath);
+	}
+
+	std::sort(entriesToRemove.begin(), entriesToRemove.end(), [](const fs::path& lhs, const fs::path& rhs) {
+		return lhs.native().size() > rhs.native().size();
+	});
+
+	for (const fs::path& entryPath : entriesToRemove) {
+		if (!fs::exists(entryPath)) {
+			continue;
+		}
+
 		std::cout << "Removing: " << entryPath << std::endl;
-		if (itEntry->is_directory()) {
+		if (fs::is_directory(entryPath)) {
 			fs::remove_all(entryPath);
 		}
-		else if (itEntry->is_regular_file()) {
+		else if (fs::is_regular_file(entryPath)) {
 			fs::remove(entryPath);
 		}
 	}
@@ -228,7 +242,7 @@ int main(int argc, char* argv[])
 	std::vector<std::string> ignoreList = std::vector<std::string>();
 	std::vector<std::string> killList = std::vector<std::string>();
 
-	ignoreList.push_back("okbdupdater.exe");
+	ignoreList.push_back("okbdupdater");
 
 	if (argc == 1) {
 		std::cout << "No arguments provided." << std::endl;
@@ -342,7 +356,7 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	updateLoad(".", "tmpZip", &ignoreList);
+	updateLoad("../", "tmpZip", &ignoreList);
 
 	return 0;
 }
