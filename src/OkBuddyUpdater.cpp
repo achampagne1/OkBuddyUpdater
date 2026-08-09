@@ -221,14 +221,25 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 		}
 	}
 
-	fs::copy_options options = fs::copy_options::recursive 
-                             | fs::copy_options::overwrite_existing;
+	fs::copy_options options = fs::copy_options::recursive;
 
 	fs::copy(updatePath, path, options, ec);
     if (ec) {
         std::cerr << "Error copying files: " << ec.message() << "\n";
         return 1;
     }
+
+	fs::remove_all(backupPath, ec);
+	if (ec) {
+		std::cerr << "Error removing backup directory: " << ec.message() << "\n";
+		return 0;
+	}
+
+	fs::remove_all("tmpZip", ec);
+	if (ec) {
+		std::cerr << "Error removing tmpZip directory: " << ec.message() << "\n";
+		return 0;
+	}
 
 	return 0;
 }
@@ -344,19 +355,23 @@ int main(int argc, char* argv[])
 	}
 
 
-	bool unzipped = extractZip("tmpZip.zip", "tmpZip");
-	if(!unzipped){
+	bool status = extractZip("tmpZip.zip", "tmpZip");
+	if(!status){
 		std::cout << "Failed to extract zip file." << std::endl;
 		return 1;
 	}
 
-	int status = remove("tmpZip.zip");
+	status = remove("tmpZip.zip");
 	if (status != 0) {
 		std::cout << "Failed to remove zip file." << std::endl;
 		return 1;
 	}
 
-	updateLoad("../", "tmpZip", &ignoreList);
+	status = updateLoad("../", "tmpZip", &ignoreList);
+	if(!status){
+		std::cout << "Failed to update files." << std::endl;
+		return 1;
+	}
 
 	return 0;
 }
