@@ -19,33 +19,41 @@
             }
         },
         {
-            "name": "debug-x64",
-            "displayName": "Debug (x64)",
+            "name": "x64-debug",
+            "displayName": "x64 Debug",
             "inherits": "windows-base",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
-            "name": "release-x64",
-            "displayName": "Release (x64)",
-            "inherits": "debug-x64",
+            "name": "x64-release",
+            "displayName": "x64 Release",
+            "inherits": "x64-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
         },
         {
-            "name": "debug-x86",
-            "displayName": "Debug (x86)",
+            "name": "x86-debug",
+            "displayName": "x86 Debug",
             "inherits": "windows-base",
+            "architecture": {
+                "value": "x86",
+                "strategy": "external"
+            },
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
-            "name": "release-x86",
-            "displayName": "Release (x86)",
-            "inherits": "debug-x86",
+            "name": "x86-release",
+            "displayName": "x86 Release",
+            "inherits": "x86-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
