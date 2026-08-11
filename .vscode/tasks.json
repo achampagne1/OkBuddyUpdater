@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build DLL",
+      "type": "shell",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "if exist out\\build\\x64-debug\\CMakeCache.txt rmdir /s /q out\\build\\x64-debug && cmake --preset x64-debug -DBUILD_AS_DLL=ON && cmake --build out\\build\\x64-debug --config Debug --target okbdupdater"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

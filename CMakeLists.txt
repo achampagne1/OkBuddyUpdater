@@ -11,13 +11,20 @@ endif()
 
 project ("OkBuddyUpdater")
 
+option(BUILD_AS_DLL "Build the project as a shared library/DLL instead of an executable" OFF)
+
 find_package(CURL REQUIRED)
 find_package(Libarchive REQUIRED)
 
-# Add source to this project's executable.
-add_executable (okbdupdater "src/OkBuddyUpdater.cpp" "src/OkBuddyUpdater.h")
+# Add source to this project's executable or shared library.
+if(BUILD_AS_DLL)
+  add_library(okbdupdater SHARED "src/OkBuddyUpdater.cpp" "src/OkBuddyUpdater.h")
+else()
+  add_executable(okbdupdater "src/OkBuddyUpdater.cpp" "src/OkBuddyUpdater.h")
+endif()
+
 target_link_libraries(okbdupdater PRIVATE CURL::libcurl LibArchive::LibArchive)
-if (CMAKE_VERSION VERSION_GREATER 3.12)
+if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.12)
   set_property(TARGET okbdupdater PROPERTY CXX_STANDARD 20)
 endif()
 
