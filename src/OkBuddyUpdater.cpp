@@ -1,5 +1,25 @@
 ﻿#include "OkBuddyUpdater.h"
 
+extern "C" __declspec(dllexport)
+void setUrl(const char* urlIn){
+	url = std::string(urlIn);
+}
+
+extern "C" __declspec(dllexport)
+void setFlagMask(const uint32_t mask){
+	flagMask = mask;
+}
+
+extern "C" __declspec(dllexport)
+void addIgnore(const char* ignore){
+	ignoreList.push_back(std::string(ignore));
+}
+
+extern "C" __declspec(dllexport)
+void addKill(const int pid){
+	killList.push_back(std::to_string(pid));
+}
+
 static size_t writeCb(char* ptr, size_t size, size_t nmemb, void* stream)
 {
     size_t written = fwrite(ptr, size, nmemb, (FILE*)stream);
@@ -254,7 +274,8 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 	return 0;
 }
 
-static int handleUpdate(){
+extern "C" __declspec(dllexport) 
+int handleUpdate(){
 	CURLcode result;
 	CURL* curl;
 
