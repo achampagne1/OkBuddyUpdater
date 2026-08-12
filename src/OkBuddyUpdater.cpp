@@ -18,6 +18,8 @@ enum FLAGS{
 	TEST 	= 0x2
 };
 
+static uint32_t flagMask = 0;
+
 static size_t writeCb(char* ptr, size_t size, size_t nmemb, void* stream)
 {
     size_t written = fwrite(ptr, size, nmemb, (FILE*)stream);
@@ -58,6 +60,11 @@ static uint32_t parseFlags(char* flags){
 static std::vector<std::string>* parseArgList(char* args, std::vector<std::string>* argList = nullptr){
 	//example: ignore="file1.txt,file2.txt"
 	//         kill="1012,1023"
+
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout << "Parsing argument list: " << args << std::endl;
+	}
+
 	if(!argList){
 		argList = new std::vector<std::string>();
 	}
@@ -94,6 +101,10 @@ bool extractZip(const char* zipFile, const char* destination)
 {
     archive* in = archive_read_new();
     archive* out = archive_write_disk_new();
+
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout << "Extracting zip file: " << zipFile << std::endl;
+	}
 
     archive_read_support_format_zip(in);
     archive_read_support_filter_all(in);
@@ -147,6 +158,10 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 	std::unordered_map<std::string, int> ignoreMap;
 	std::error_code ec;
 
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout << "Updating files in: " << path << std::endl;
+	}
+
 	const fs::path sourcePath = fs::absolute(path);
 	const fs::path backupPath = sourcePath / "tmpcpybak";
 	const std::string backupDirName = backupPath.filename().string();
@@ -164,6 +179,10 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 		ignoreMap[ignore] = 1;
 	}
 	ignoreMap[backupDirName] = 1;
+
+	if (flagMask & FLAGS::VERBOSE) {
+		std::cout << "Backing up files to: " << backupPath << std::endl;
+	}
 
 	for (auto itEntry = fs::recursive_directory_iterator(sourcePath); itEntry != fs::recursive_directory_iterator(); ++itEntry) {
 		const fs::path entryPath = itEntry->path();
@@ -203,6 +222,10 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 		entriesToRemove.push_back(entryPath);
 	}
 
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout << "Removing files from: " << path << std::endl;
+	}
+
 	std::sort(entriesToRemove.begin(), entriesToRemove.end(), [](const fs::path& lhs, const fs::path& rhs) {
 		return lhs.native().size() > rhs.native().size();
 	});
@@ -212,7 +235,6 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 			continue;
 		}
 
-		std::cout << "Removing: " << entryPath << std::endl;
 		if (fs::is_directory(entryPath)) {
 			fs::remove_all(entryPath);
 		}
@@ -223,11 +245,19 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 
 	fs::copy_options options = fs::copy_options::recursive;
 
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout << "Copying files from: " << updatePath << " to: " << path << std::endl;
+	}
+
 	fs::copy(updatePath, path, options, ec);
     if (ec) {
         std::cerr << "Error copying files: " << ec.message() << "\n";
         return 1;
     }
+
+	if(flagMask & FLAGS::VERBOSE){
+		std::cout << "Cleaning up temporary files." << std::endl;
+	}
 
 	fs::remove_all(backupPath, ec);
 	if (ec) {
@@ -246,7 +276,6 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 
 int main(int argc, char* argv[])
 {
-	uint32_t flagMask = 0;
 	CURLcode result;
 	CURL* curl;
 	std::string url = "";
