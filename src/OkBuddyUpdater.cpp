@@ -1,24 +1,4 @@
 ﻿#include "OkBuddyUpdater.h"
-#include <curl/curl.h>
-#include <string>
-#include <vector>
-#include <archive.h>
-#include <archive_entry.h>
-#include <filesystem>
-#include <unordered_map>
-#include <algorithm>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
-enum FLAGS{
-	DASH 	= 0x0,
-	VERBOSE = 0x1,
-	TEST 	= 0x2
-};
-
-static uint32_t flagMask = 0;
 
 static size_t writeCb(char* ptr, size_t size, size_t nmemb, void* stream)
 {
@@ -57,7 +37,7 @@ static uint32_t parseFlags(char* flags){
 	return outMask;
 }
 
-static std::vector<std::string>* parseArgList(char* args, std::vector<std::string>* argList = nullptr){
+static std::vector<std::string>* parseArgList(char* args, std::vector<std::string>* argList){
 	//example: ignore="file1.txt,file2.txt"
 	//         kill="1012,1023"
 
@@ -97,7 +77,7 @@ static std::vector<std::string>* parseArgList(char* args, std::vector<std::strin
 	return argList;
 }
 
-bool extractZip(const char* zipFile, const char* destination)
+static bool extractZip(const char* zipFile, const char* destination)
 {
     archive* in = archive_read_new();
     archive* out = archive_write_disk_new();
@@ -274,37 +254,11 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 	return 0;
 }
 
-int main(int argc, char* argv[])
-{
+static int handleUpdate(){
 	CURLcode result;
 	CURL* curl;
-	std::string url = "";
-	std::vector<std::string> ignoreList = std::vector<std::string>();
-	std::vector<std::string> killList = std::vector<std::string>();
 
 	ignoreList.push_back("okbdupdater");
-
-	if (argc == 1) {
-		std::cout << "No arguments provided." << std::endl;
-		return 1;
-	}
-	
-	int count = 1;
-	while (count < argc) {
-		if (argv[count][0] == '-') {
-			flagMask = parseFlags(argv[count]);
-		} 
-		else if(((std::string)argv[count]).substr(0, 6) == "ignore"){
-			parseArgList(argv[count], &ignoreList);
-		}
-		else if(((std::string)argv[count]).substr(0, 4) == "kill"){
-			parseArgList(argv[count], &killList);
-		}
-		else { 
-			url = argv[count];
-		}
-		count++;
-	}
 
 	if(url.empty()){
 		std::cout << "No URL provided." << std::endl;
@@ -403,4 +357,31 @@ int main(int argc, char* argv[])
 	}
 
 	return 0;
+}
+
+int main(int argc, char* argv[])
+{
+	if (argc == 1) {
+		std::cout << "No arguments provided." << std::endl;
+		return 1;
+	}
+	
+	int count = 1;
+	while (count < argc) {
+		if (argv[count][0] == '-') {
+			flagMask = parseFlags(argv[count]);
+		} 
+		else if(((std::string)argv[count]).substr(0, 6) == "ignore"){
+			parseArgList(argv[count], &ignoreList);
+		}
+		else if(((std::string)argv[count]).substr(0, 4) == "kill"){
+			parseArgList(argv[count], &killList);
+		}
+		else { 
+			url = argv[count];
+		}
+		count++;
+	}
+
+	return handleUpdate();
 }
