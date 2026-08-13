@@ -6,8 +6,13 @@ void setUrl(const char* urlIn){
 }
 
 extern "C" __declspec(dllexport)
-void setFlagMask(const uint32_t mask){
+void setFlagMaskUint(const uint32_t mask){
 	flagMask = mask;
+}
+
+extern "C" __declspec(dllexport)
+void setFlagMaskString(const char* mask){
+	flagMask = parseFlags(mask);
 }
 
 extern "C" __declspec(dllexport)
@@ -33,7 +38,7 @@ static size_t writeString(char* ptr, size_t size, size_t nmemb, void* stream)
 	return size * nmemb;
 }
 
-static uint32_t parseFlags(char* flags){
+static uint32_t parseFlags(const char* flags){
 	uint32_t outMask = 0;
 	while(*flags != '\0'){
 		switch(*flags){
@@ -234,6 +239,8 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 		if (!fs::exists(entryPath)) {
 			continue;
 		}
+
+		std::cout<<"removing"<<entryPath<<std::endl;
 
 		if (fs::is_directory(entryPath)) {
 			fs::remove_all(entryPath);
