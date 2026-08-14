@@ -157,52 +157,39 @@ static bool extractZip(const char* zipFile, const char* destination)
     return true;
 }
 
-static void recursiveCopy(const fs::directory_entry path,const fs::path& backupDir, const fs::path& sourceRoot){
-	for (const fs::directory_entry& entry : fs::directory_iterator(path))
-	{
-		if(ignoreMap.find(fs::relative(entry.path(),sourceRoot))==ignoreMap.end()){
-			if(entry.is_directory()){
-				recursiveCopy(entry, backupDir, sourceRoot);
-			}
-			//reach bottom then copy going back up
-			fs::path target = backupDir / fs::relative(entry.path(), sourceRoot);
-			fs::create_directories(target.parent_path());
-			if(entry.is_regular_file())
-				fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
-			else{
-				fs::create_directories(target); //for empty folders
-			}
-			//TODO: guard against deletion if child is ignored
-			//fs::remove(entry);
-		}
+static void copyItem(const fs::directory_entry entry,const fs::path& backupDir){
+	fs::path target = backupDir / fs::relative(entry.path(), root);
+	fs::create_directories(target.parent_path());
+	if(entry.is_regular_file())
+		fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+	else{
+		fs::create_directories(target); //for empty folders
 	}
 }
 
-static void recursiveDelete(const fs::directory_entry path, const fs::path& sourceRoot){
-	for (const fs::directory_entry& entry : fs::directory_iterator(path))
+static void recursiveExplore(const fs::directory_entry entry,const std::function<void(const fs::directory_entry,const fs::path)> action, const fs::path& argPath){
+	for (const fs::directory_entry& child : fs::directory_iterator(entry))
 	{
-		if(ignoreMap.find(fs::relative(entry.path(),sourceRoot))==ignoreMap.end()){
-			if(entry.is_directory()){
-				recursiveDelete(entry, sourceRoot);
+		if(ignoreMap.find(fs::relative(child.path(),root))==ignoreMap.end()){
+			if(child.is_directory()){
+				recursiveExplore(child, action, argPath);
 			}
 			//reach bottom then copy going back up
-			//TODO: guard against deletion if child is ignored
-			fs::remove(entry);
+			action(child,argPath);
 		}
 	}
 }
 
 static int updateLoad(const std::string path, const std::string updatePath)
 {
-	namespace fs = std::filesystem;
 	std::error_code ec;
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Updating files in: " << path << std::endl;
 	}
 
-	const fs::path sourcePath = fs::absolute(path);
-	const fs::path backupPath = sourcePath / "tmpcpybak";
+	root = fs::absolute(path);
+	const fs::path backupPath = root / "tmpcpybak";
 	const std::string backupDirName = backupPath.filename().string();
 
 	if (fs::exists(backupPath)) {
@@ -220,13 +207,13 @@ static int updateLoad(const std::string path, const std::string updatePath)
 		std::cout << "Backing up files to: " << backupPath << std::endl;
 	}
 
-	recursiveCopy(fs::directory_entry(sourcePath),backupPath,sourcePath);
+	recursiveExplore(fs::directory_entry(root),copyItem,backupPath);
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Removing files from: " << path << std::endl;
 	}
 
-	recursiveDelete(fs::directory_entry(sourcePath),sourcePath);
+	recursiveExplore(fs::directory_entry(root),[](fs::path entry,fs::path none){fs::remove(entry);});
 
 	return 0;
 
