@@ -16,6 +16,11 @@ void setFlagMaskString(const char* mask){
 }
 
 extern "C" __declspec(dllexport)
+void setRoot(const char* rootInput){
+	rootIn = rootInput;
+}
+
+extern "C" __declspec(dllexport)
 void addIgnore(const char* ignore){
 	ignoreMap[std::string(ignore)] = 1;
 }
@@ -215,8 +220,6 @@ static int updateLoad(const std::string path, const std::string updatePath)
 
 	recursiveExplore(fs::directory_entry(root),[](fs::path entry,fs::path none){fs::remove(entry);});
 
-	return 0;
-
 	fs::copy_options options = fs::copy_options::recursive;
 
 	if(flagMask & FLAGS::VERBOSE){
@@ -236,13 +239,13 @@ static int updateLoad(const std::string path, const std::string updatePath)
 	fs::remove_all(backupPath, ec);
 	if (ec) {
 		std::cerr << "Error removing backup directory: " << ec.message() << "\n";
-		return 0;
+		return 1;
 	}
 
 	fs::remove_all("tmpZip", ec);
 	if (ec) {
 		std::cerr << "Error removing tmpZip directory: " << ec.message() << "\n";
-		return 0;
+		return 1;
 	}
 
 	return 0;
@@ -280,7 +283,7 @@ int handleUpdate(){
 		return (int)result;
 	}
 
-	/*curl = curl_easy_init();
+	curl = curl_easy_init();
     if (curl) {
         FILE* pagefile;
         pagefile = fopen("tmpZip.zip", "wb");
@@ -308,7 +311,7 @@ int handleUpdate(){
 	else {
 		std::cout << "Failed to initialize curl." << std::endl;
 		return 1;
-	}*/
+	}
 
 	for(std::string pid : killList){
 		#ifdef _WIN32
@@ -333,20 +336,21 @@ int handleUpdate(){
 	}
 
 
-	/*bool status = extractZip("tmpZip.zip", "tmpZip");
+	bool status = extractZip("tmpZip.zip", "tmpZip");
 	if(!status){
 		std::cout << "Failed to extract zip file." << std::endl;
 		return 1;
 	}
+	ignoreMap["tmpZip"] = 1;
 
 	status = remove("tmpZip.zip");
 	if (status != 0) {
 		std::cout << "Failed to remove zip file." << std::endl;
 		return 1;
-	}*/
+	}
 
-	bool status = updateLoad("..\\", "tmpZip");
-	if(!status){
+	status = updateLoad(rootIn.string(), "tmpZip");
+	if(status != 0){
 		std::cout << "Failed to update files." << std::endl;
 		return 1;
 	}

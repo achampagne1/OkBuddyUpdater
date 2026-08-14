@@ -30,10 +30,12 @@ static std::string url = "";
 static std::unordered_map<fs::path, int> ignoreMap;
 static std::vector<std::string> killList = std::vector<std::string>();
 static fs::path root;
+static fs::path rootIn;
 
  
 extern "C" UPDATER_API void setFlagMaskUint(const uint32_t mask);
 extern "C" UPDATER_API void setFlagMaskString(const char* mask);
+extern "C" UPDATER_API void setRoot(const char* rootInput);
 extern "C" UPDATER_API void addIgnore(const char* ignore);
 extern "C" UPDATER_API void addKill(const int pid);
 
