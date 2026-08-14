@@ -26,7 +26,7 @@ namespace fs = std::filesystem;
 
 static uint32_t flagMask = 0;
 static std::string url = "";
-static std::unordered_map<std::string, int> ignoreMap;
+static std::unordered_map<fs::path, int> ignoreMap;
 static std::vector<std::string> killList = std::vector<std::string>();
 
  
@@ -40,6 +40,8 @@ static size_t writeString(char* ptr, size_t size, size_t nmemb, void* stream);
 static uint32_t parseFlags(const char* flags);
 static std::vector<std::string>* parseArgList(char* args, std::vector<std::string>* argList = nullptr);
 static bool extractZip(const char* zipFile, const char* destination);
+static void recursiveCopy(const fs::directory_entry path,const fs::path& backupDir, const fs::path& sourceRoot);
+static void recursiveDelete(const fs::directory_entry path, const fs::path& sourceRoot);
 static int updateLoad(const std::string path, const std::string updatePath);
 extern "C" UPDATER_API int handleUpdate();
 

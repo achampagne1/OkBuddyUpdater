@@ -157,12 +157,12 @@ static bool extractZip(const char* zipFile, const char* destination)
     return true;
 }
 
-static void traverseFolder(const fs::directory_entry path,const fs::path& backupDir, const fs::path& sourceRoot){
+static void recursiveCopy(const fs::directory_entry path,const fs::path& backupDir, const fs::path& sourceRoot){
 	for (const fs::directory_entry& entry : fs::directory_iterator(path))
 	{
-		if(ignoreMap.find(entry.path().filename().string())==ignoreMap.end()){
+		if(ignoreMap.find(fs::relative(entry.path(),sourceRoot))==ignoreMap.end()){
 			if(entry.is_directory()){
-				traverseFolder(entry, backupDir, sourceRoot);
+				recursiveCopy(entry, backupDir, sourceRoot);
 			}
 			//reach bottom then copy going back up
 			fs::path target = backupDir / fs::relative(entry.path(), sourceRoot);
@@ -172,6 +172,22 @@ static void traverseFolder(const fs::directory_entry path,const fs::path& backup
 			else{
 				fs::create_directories(target); //for empty folders
 			}
+			//TODO: guard against deletion if child is ignored
+			//fs::remove(entry);
+		}
+	}
+}
+
+static void recursiveDelete(const fs::directory_entry path, const fs::path& sourceRoot){
+	for (const fs::directory_entry& entry : fs::directory_iterator(path))
+	{
+		if(ignoreMap.find(fs::relative(entry.path(),sourceRoot))==ignoreMap.end()){
+			if(entry.is_directory()){
+				recursiveDelete(entry, sourceRoot);
+			}
+			//reach bottom then copy going back up
+			//TODO: guard against deletion if child is ignored
+			fs::remove(entry);
 		}
 	}
 }
@@ -204,46 +220,15 @@ static int updateLoad(const std::string path, const std::string updatePath)
 		std::cout << "Backing up files to: " << backupPath << std::endl;
 	}
 
-	traverseFolder(fs::directory_entry(sourcePath),backupPath,sourcePath);
-return 0;
-
-	std::vector<fs::path> entriesToRemove;
-	for (auto itEntry = fs::recursive_directory_iterator(sourcePath); itEntry != fs::recursive_directory_iterator(); ++itEntry) {
-		const fs::path entryPath = itEntry->path();
-		const std::string filenameStr = entryPath.filename().string();
-
-		if (ignoreMap.find(filenameStr) != ignoreMap.end()) {
-			if (itEntry->is_directory()) {
-				itEntry.disable_recursion_pending();
-			}
-			continue;
-		}
-
-		entriesToRemove.push_back(entryPath);
-	}
+	recursiveCopy(fs::directory_entry(sourcePath),backupPath,sourcePath);
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Removing files from: " << path << std::endl;
 	}
 
-	std::sort(entriesToRemove.begin(), entriesToRemove.end(), [](const fs::path& lhs, const fs::path& rhs) {
-		return lhs.native().size() > rhs.native().size();
-	});
+	recursiveDelete(fs::directory_entry(sourcePath),sourcePath);
 
-	for (const fs::path& entryPath : entriesToRemove) {
-		if (!fs::exists(entryPath)) {
-			continue;
-		}
-
-		std::cout<<"removing"<<entryPath<<std::endl;
-
-		if (fs::is_directory(entryPath)) {
-			fs::remove_all(entryPath);
-		}
-		else if (fs::is_regular_file(entryPath)) {
-			fs::remove(entryPath);
-		}
-	}
+	return 0;
 
 	fs::copy_options options = fs::copy_options::recursive;
 
