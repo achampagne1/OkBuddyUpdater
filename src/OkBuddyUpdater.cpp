@@ -17,7 +17,7 @@ void setFlagMaskString(const char* mask){
 
 extern "C" __declspec(dllexport)
 void addIgnore(const char* ignore){
-	ignoreList.push_back(std::string(ignore));
+	ignoreMap[std::string(ignore)] = 1;
 }
 
 extern "C" __declspec(dllexport)
@@ -157,10 +157,28 @@ static bool extractZip(const char* zipFile, const char* destination)
     return true;
 }
 
-static int updateLoad(const std::string path, const std::string updatePath, std::vector<std::string>* ignoreList)
+static void traverseFolder(const fs::directory_entry path,const fs::path& backupDir, const fs::path& sourceRoot){
+	for (const fs::directory_entry& entry : fs::directory_iterator(path))
+	{
+		if(ignoreMap.find(entry.path().filename().string())==ignoreMap.end()){
+			if(entry.is_directory()){
+				traverseFolder(entry, backupDir, sourceRoot);
+			}
+			//reach bottom then copy going back up
+			fs::path target = backupDir / fs::relative(entry.path(), sourceRoot);
+			fs::create_directories(target.parent_path());
+			if(entry.is_regular_file())
+				fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+			else{
+				fs::create_directories(target); //for empty folders
+			}
+		}
+	}
+}
+
+static int updateLoad(const std::string path, const std::string updatePath)
 {
 	namespace fs = std::filesystem;
-	std::unordered_map<std::string, int> ignoreMap;
 	std::error_code ec;
 
 	if(flagMask & FLAGS::VERBOSE){
@@ -180,37 +198,14 @@ static int updateLoad(const std::string path, const std::string updatePath, std:
 		return 1;
 	}
 
-	for (const std::string& ignore : *ignoreList) {
-		ignoreMap[ignore] = 1;
-	}
 	ignoreMap[backupDirName] = 1;
 
 	if (flagMask & FLAGS::VERBOSE) {
 		std::cout << "Backing up files to: " << backupPath << std::endl;
 	}
 
-	for (auto itEntry = fs::recursive_directory_iterator(sourcePath); itEntry != fs::recursive_directory_iterator(); ++itEntry) {
-		const fs::path entryPath = itEntry->path();
-		const fs::path relativePath = fs::relative(entryPath, sourcePath);
-		const fs::path targetPath = backupPath / relativePath;
-		const std::string filenameStr = entryPath.filename().string();
-		const std::string relativeStr = relativePath.generic_string();
-
-		if (ignoreMap.find(filenameStr) != ignoreMap.end()) {
-			if (itEntry->is_directory()) {
-				itEntry.disable_recursion_pending();
-			}
-			continue;
-		}
-
-		if (itEntry->is_directory()) {
-			fs::create_directories(targetPath);
-		}
-		else if (itEntry->is_regular_file()) {
-			fs::create_directories(targetPath.parent_path());
-			fs::copy_file(entryPath, targetPath, fs::copy_options::overwrite_existing);
-		}
-	}
+	traverseFolder(fs::directory_entry(sourcePath),backupPath,sourcePath);
+return 0;
 
 	std::vector<fs::path> entriesToRemove;
 	for (auto itEntry = fs::recursive_directory_iterator(sourcePath); itEntry != fs::recursive_directory_iterator(); ++itEntry) {
@@ -286,24 +281,24 @@ int handleUpdate(){
 	CURLcode result;
 	CURL* curl;
 
-	ignoreList.push_back("okbdupdater");
+	ignoreMap["okbdupdater"] = 1;
 
 	if(url.empty()){
 		std::cout << "No URL provided." << std::endl;
 		return 1;
 	}
 
-	if(flagMask & FLAGS::VERBOSE && !ignoreList.empty()){
+	if(flagMask & FLAGS::VERBOSE && !ignoreMap.empty()){
 		std::cout<<"Files to ignore:" << std::endl;
-		for(std::string ignore : ignoreList){
-			std::cout << "\t" << ignore<< std::endl;
+		for(const auto& [ignore, _] : ignoreMap){
+			std::cout<< ignore<< std::endl;
 		}
 	}
 
 	if(flagMask & FLAGS::VERBOSE && !killList.empty()){
 		std::cout<<"Processes to kill:" << std::endl;
 		for(std::string kill : killList){
-			std::cout << "\t" << kill<< std::endl;
+			std::cout << kill<< std::endl;
 		}
 	}
 
@@ -313,7 +308,7 @@ int handleUpdate(){
 		return (int)result;
 	}
 
-	curl = curl_easy_init();
+	/*curl = curl_easy_init();
     if (curl) {
         FILE* pagefile;
         pagefile = fopen("tmpZip.zip", "wb");
@@ -341,7 +336,7 @@ int handleUpdate(){
 	else {
 		std::cout << "Failed to initialize curl." << std::endl;
 		return 1;
-	}
+	}*/
 
 	for(std::string pid : killList){
 		#ifdef _WIN32
@@ -366,7 +361,7 @@ int handleUpdate(){
 	}
 
 
-	bool status = extractZip("tmpZip.zip", "tmpZip");
+	/*bool status = extractZip("tmpZip.zip", "tmpZip");
 	if(!status){
 		std::cout << "Failed to extract zip file." << std::endl;
 		return 1;
@@ -376,9 +371,9 @@ int handleUpdate(){
 	if (status != 0) {
 		std::cout << "Failed to remove zip file." << std::endl;
 		return 1;
-	}
+	}*/
 
-	status = updateLoad("../", "tmpZip", &ignoreList);
+	bool status = updateLoad("..\\", "tmpZip");
 	if(!status){
 		std::cout << "Failed to update files." << std::endl;
 		return 1;
@@ -393,6 +388,8 @@ int main(int argc, char* argv[])
 		std::cout << "No arguments provided." << std::endl;
 		return 1;
 	}
+
+	std::vector<std::string> ignoreList = std::vector<std::string>();
 	
 	int count = 1;
 	while (count < argc) {
@@ -409,6 +406,10 @@ int main(int argc, char* argv[])
 			url = argv[count];
 		}
 		count++;
+	}
+
+	for (const std::string& ignore : ignoreList) {
+		ignoreMap[ignore] = 1;
 	}
 
 	return handleUpdate();
