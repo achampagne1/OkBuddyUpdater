@@ -16,8 +16,8 @@ void setFlagMaskString(const char* mask){
 }
 
 extern "C" __declspec(dllexport)
-void setRoot(const char* rootInput){
-	rootIn = rootInput;
+void setRoot(const char* rootIn){
+	root = rootIn;
 }
 
 extern "C" __declspec(dllexport)
@@ -107,7 +107,7 @@ static std::vector<std::string>* parseArgList(char* args, std::vector<std::strin
 	return argList;
 }
 
-static bool extractZip(const char* zipFile, const char* destination)
+static bool extractZip(const char* zipFile, fs::path destination)
 {
     archive* in = archive_read_new();
     archive* out = archive_write_disk_new();
@@ -135,9 +135,9 @@ static bool extractZip(const char* zipFile, const char* destination)
 
     while (archive_read_next_header(in, &entry) == ARCHIVE_OK)
     {
-        std::string fullPath = std::string(destination) + "\\" + archive_entry_pathname(entry);
+		fs::path fullPath = destination / archive_entry_pathname(entry);
 
-        archive_entry_set_pathname(entry, fullPath.c_str());
+        archive_entry_set_pathname(entry, fullPath.string().c_str());
 
         int r = archive_write_header(out, entry);
 
@@ -185,15 +185,14 @@ static void recursiveExplore(const fs::directory_entry entry,const std::function
 	}
 }
 
-static int updateLoad(const std::string path, const std::string updatePath)
+static int updateLoad(const std::string updatePath)
 {
 	std::error_code ec;
 
 	if(flagMask & FLAGS::VERBOSE){
-		std::cout << "Updating files in: " << path << std::endl;
+		std::cout << "Updating files in: " << root << std::endl;
 	}
 
-	root = fs::absolute(path);
 	const fs::path backupPath = root / "tmpcpybak";
 	const std::string backupDirName = backupPath.filename().string();
 
@@ -215,7 +214,7 @@ static int updateLoad(const std::string path, const std::string updatePath)
 	recursiveExplore(fs::directory_entry(root),copyItem,backupPath);
 
 	if(flagMask & FLAGS::VERBOSE){
-		std::cout << "Removing files from: " << path << std::endl;
+		std::cout << "Removing files from: " << root << std::endl;
 	}
 
 	recursiveExplore(fs::directory_entry(root),[](fs::path entry,fs::path none){fs::remove(entry);});
@@ -223,10 +222,10 @@ static int updateLoad(const std::string path, const std::string updatePath)
 	fs::copy_options options = fs::copy_options::recursive;
 
 	if(flagMask & FLAGS::VERBOSE){
-		std::cout << "Copying files from: " << updatePath << " to: " << path << std::endl;
+		std::cout << "Copying files from: " << updatePath << " to: " << root << std::endl;
 	}
 
-	fs::copy(updatePath, path, options, ec);
+	fs::copy(updatePath, root, options, ec);
     if (ec) {
         std::cerr << "Error copying files: " << ec.message() << "\n";
         return 1;
@@ -261,6 +260,14 @@ int handleUpdate(){
 	if(url.empty()){
 		std::cout << "No URL provided." << std::endl;
 		return 1;
+	}
+
+	if(root.empty()){
+		if(flagMask & FLAGS::VERBOSE){
+			std::cout<<"Root is not set, defaulting to current directory:"<<std::endl;
+			std::cout<<"\t"<<fs::absolute(".")<<std::endl;
+		}
+		root = fs::absolute(".");
 	}
 
 	if(flagMask & FLAGS::VERBOSE && !ignoreMap.empty()){
@@ -349,7 +356,7 @@ int handleUpdate(){
 		return 1;
 	}
 
-	status = updateLoad(rootIn.string(), "tmpZip");
+	status = updateLoad("tmpZip");
 	if(status != 0){
 		std::cout << "Failed to update files." << std::endl;
 		return 1;
