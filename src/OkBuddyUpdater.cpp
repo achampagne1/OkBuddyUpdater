@@ -22,7 +22,7 @@ void setRoot(const char* rootIn){
 
 extern "C" __declspec(dllexport)
 void addIgnore(const char* ignore){
-	ignoreMap[std::string(ignore)] = 1;
+	ignoreList.push_back(ignore);
 }
 
 extern "C" __declspec(dllexport)
@@ -156,31 +156,44 @@ static bool extractZip(const char* zipFile, fs::path destination)
         archive_write_finish_entry(out);
     }
 
-    archive_write_free(out);
-    archive_read_free(in);
+	archive_write_close(out);
+	archive_write_free(out);
+
+	archive_read_close(in);
+	archive_read_free(in);
 
     return true;
 }
 
-static void copyItem(const fs::directory_entry entry,const fs::path& backupDir){
-	fs::path target = backupDir / fs::relative(entry.path(), root);
+static void copyItem(const fs::directory_entry entry,const fs::path& to,const fs::path& from){
+	fs::path target = to / fs::relative(entry.path(), from);
 	fs::create_directories(target.parent_path());
-	if(entry.is_regular_file())
-		fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+	std::cout<<to<<" "<<entry.path()<<" "<<target<<std::endl;
+	if(entry.is_regular_file()){
+		try{ 
+			fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+		}
+		catch (const fs::filesystem_error& e){
+			std::cerr << "filesystem_error: " << e.what() << " code=" << e.code().message();
+			if(!e.path1().empty()) std::cerr << " path1=" << e.path1();
+			if(!e.path2().empty()) std::cerr << " path2=" << e.path2();
+			std::cerr << std::endl;
+		}
+	}
 	else{
 		fs::create_directories(target); //for empty folders
 	}
 }
 
-static void recursiveExplore(const fs::directory_entry entry,const std::function<void(const fs::directory_entry,const fs::path)> action, const fs::path& argPath){
+static void recursiveExplore(const fs::directory_entry entry, const std::function<void(const fs::directory_entry,const fs::path, const fs::path)> action, const fs::path& arg1, const fs::path& arg2){
 	for (const fs::directory_entry& child : fs::directory_iterator(entry))
 	{
-		if(ignoreMap.find(fs::relative(child.path(),root))==ignoreMap.end()){
+		if(ignoreMap.find(child.path())==ignoreMap.end()){
 			if(child.is_directory()){
-				recursiveExplore(child, action, argPath);
+				recursiveExplore(child, action, arg1,arg2);
 			}
-			//reach bottom then copy going back up
-			action(child,argPath);
+			//reach bottom then perform action going back up
+			action(child,arg1,arg2);
 		}
 	}
 }
@@ -194,30 +207,26 @@ static int updateLoad(const std::string updatePath)
 	}
 
 	const fs::path backupPath = root / "tmpcpybak";
-	const std::string backupDirName = backupPath.filename().string();
-
 	if (fs::exists(backupPath)) {
 		fs::remove_all(backupPath);
 	}
-
 	if (!fs::create_directory(backupPath)) {
 		std::cout << "Failed to create backup directory." << std::endl;
 		return 1;
 	}
-
-	ignoreMap[backupDirName] = 1;
+	ignoreMap[backupPath] = 1;
 
 	if (flagMask & FLAGS::VERBOSE) {
 		std::cout << "Backing up files to: " << backupPath << std::endl;
 	}
 
-	recursiveExplore(fs::directory_entry(root),copyItem,backupPath);
+	recursiveExplore(fs::directory_entry(root),copyItem,backupPath,root);
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Removing files from: " << root << std::endl;
 	}
 
-	recursiveExplore(fs::directory_entry(root),[](fs::path entry,fs::path none){fs::remove(entry);});
+	recursiveExplore(fs::directory_entry(root),[](fs::path entry,fs::path none1,fs::path none2){fs::remove(entry);});
 
 	fs::copy_options options = fs::copy_options::recursive;
 
@@ -225,11 +234,7 @@ static int updateLoad(const std::string updatePath)
 		std::cout << "Copying files from: " << updatePath << " to: " << root << std::endl;
 	}
 
-	fs::copy(updatePath, root, options, ec);
-    if (ec) {
-        std::cerr << "Error copying files: " << ec.message() << "\n";
-        return 1;
-    }
+	recursiveExplore(fs::directory_entry(updatePath),copyItem,root,updatePath);
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Cleaning up temporary files." << std::endl;
@@ -255,20 +260,25 @@ int handleUpdate(){
 	CURLcode result;
 	CURL* curl;
 
-	ignoreMap["okbdupdater"] = 1;
-
 	if(url.empty()){
 		std::cout << "No URL provided." << std::endl;
 		return 1;
 	}
 
 	if(root.empty()){
-		if(flagMask & FLAGS::VERBOSE){
-			std::cout<<"Root is not set, defaulting to current directory:"<<std::endl;
-			std::cout<<"\t"<<fs::absolute(".")<<std::endl;
-		}
+		std::cout<<"Root is not set, defaulting to current directory:"<<std::endl;
+		std::cout<<"\t"<<fs::absolute(".")<<std::endl;
 		root = fs::absolute(".");
 	}
+
+	for(std::string ignore : ignoreList){
+		fs::path ignorePath = fs::path(ignore);
+		if(ignorePath.is_relative()){
+			ignorePath = root / ignorePath;
+		}
+		ignoreMap[ignorePath] = 1;
+	}
+	ignoreMap[root / "okbdupdater"] = 1;
 
 	if(flagMask & FLAGS::VERBOSE && !ignoreMap.empty()){
 		std::cout<<"Files to ignore:" << std::endl;
@@ -290,10 +300,12 @@ int handleUpdate(){
 		return (int)result;
 	}
 
+	std::string zipPath = (root / "tmpZip.zip").string();
+	std::string unzipPath = (root / "tmpZip").string();
 	curl = curl_easy_init();
     if (curl) {
         FILE* pagefile;
-        pagefile = fopen("tmpZip.zip", "wb");
+        pagefile = fopen(zipPath.c_str(), "wb");
         std::string signedUrl = "";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -343,12 +355,12 @@ int handleUpdate(){
 	}
 
 
-	bool status = extractZip("tmpZip.zip", "tmpZip");
+	bool status = extractZip(zipPath.c_str(), unzipPath);
 	if(!status){
 		std::cout << "Failed to extract zip file." << std::endl;
 		return 1;
 	}
-	ignoreMap["tmpZip"] = 1;
+	ignoreMap[unzipPath] = 1;
 
 	status = remove("tmpZip.zip");
 	if (status != 0) {
@@ -356,7 +368,7 @@ int handleUpdate(){
 		return 1;
 	}
 
-	status = updateLoad("tmpZip");
+	status = updateLoad(unzipPath);
 	if(status != 0){
 		std::cout << "Failed to update files." << std::endl;
 		return 1;
@@ -389,10 +401,6 @@ int main(int argc, char* argv[])
 			url = argv[count];
 		}
 		count++;
-	}
-
-	for (const std::string& ignore : ignoreList) {
-		ignoreMap[ignore] = 1;
 	}
 
 	return handleUpdate();
