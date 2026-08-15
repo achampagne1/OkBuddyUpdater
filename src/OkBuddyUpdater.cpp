@@ -170,15 +170,7 @@ static void copyItem(const fs::directory_entry entry,const fs::path& to,const fs
 	fs::create_directories(target.parent_path());
 	std::cout<<to<<" "<<entry.path()<<" "<<target<<std::endl;
 	if(entry.is_regular_file()){
-		try{ 
-			fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
-		}
-		catch (const fs::filesystem_error& e){
-			std::cerr << "filesystem_error: " << e.what() << " code=" << e.code().message();
-			if(!e.path1().empty()) std::cerr << " path1=" << e.path1();
-			if(!e.path2().empty()) std::cerr << " path2=" << e.path2();
-			std::cerr << std::endl;
-		}
+		fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
 	}
 	else{
 		fs::create_directories(target); //for empty folders
@@ -396,6 +388,22 @@ int main(int argc, char* argv[])
 		}
 		else if(((std::string)argv[count]).substr(0, 4) == "kill"){
 			parseArgList(argv[count], &killList);
+		}
+		else if(((std::string)argv[count]).substr(0, 4) == "root"){
+			char* rootChar = argv[count];
+			std::string rootStr;
+			while(*rootChar != '=' && *rootChar != '\0'){
+				rootChar++;
+			}
+			rootChar++;
+
+			while(*rootChar!='\0'){
+				rootStr+=rootChar;
+				rootChar++;
+			}
+
+			if(!rootStr.empty())
+				root = rootStr;
 		}
 		else { 
 			url = argv[count];
