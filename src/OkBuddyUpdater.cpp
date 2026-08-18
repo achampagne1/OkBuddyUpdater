@@ -168,7 +168,6 @@ static bool extractZip(const char* zipFile, fs::path destination)
 static void copyItem(const fs::directory_entry entry,const fs::path& to,const fs::path& from){
 	fs::path target = to / fs::relative(entry.path(), from);
 	fs::create_directories(target.parent_path());
-	std::cout<<to<<" "<<entry.path()<<" "<<target<<std::endl;
 	if(entry.is_regular_file()){
 		fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
 	}
@@ -177,15 +176,29 @@ static void copyItem(const fs::directory_entry entry,const fs::path& to,const fs
 	}
 }
 
-static void recursiveExplore(const fs::directory_entry entry, const std::function<void(const fs::directory_entry,const fs::path, const fs::path)> action, const fs::path& arg1, const fs::path& arg2){
+static void deleteItem(const fs::directory_entry entry,const fs::path& none1,const fs::path& none2){
+	fs::remove(entry);
+}
+
+static int recursiveExplore(const fs::directory_entry entry, const std::function<void(const fs::directory_entry,const fs::path, const fs::path)> action, const fs::path& arg1, const fs::path& arg2){
 	for (const fs::directory_entry& child : fs::directory_iterator(entry))
 	{
 		if(ignoreMap.find(child.path())==ignoreMap.end()){
 			if(child.is_directory()){
-				recursiveExplore(child, action, arg1,arg2);
+				int status = recursiveExplore(child, action, arg1,arg2);
+				if(status){
+					return status;
+				}
 			}
 			//reach bottom then perform action going back up
-			action(child,arg1,arg2);
+			try{
+				action(child,arg1,arg2);
+				return 0;
+			}
+			catch(const std::runtime_error& e){
+				std::cerr<<"Error during copy: " << e.what() <<std::endl;
+				return 1;
+			}
 		}
 	}
 }
@@ -193,6 +206,8 @@ static void recursiveExplore(const fs::directory_entry entry, const std::functio
 static int updateLoad(const std::string updatePath)
 {
 	std::error_code ec;
+	fs::copy_options options = fs::copy_options::recursive;
+	int status = 0;
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Updating files in: " << root << std::endl;
@@ -212,21 +227,38 @@ static int updateLoad(const std::string updatePath)
 		std::cout << "Backing up files to: " << backupPath << std::endl;
 	}
 
-	recursiveExplore(fs::directory_entry(root),copyItem,backupPath,root);
+	status = recursiveExplore(fs::directory_entry(root),copyItem,backupPath,root);
+	if(status){
+		std::cout<<"Something went wrong in backup phase"<<std::endl;
+	}
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Removing files from: " << root << std::endl;
 	}
 
-	recursiveExplore(fs::directory_entry(root),[](fs::path entry,fs::path none1,fs::path none2){fs::remove(entry);});
-
-	fs::copy_options options = fs::copy_options::recursive;
+	status = recursiveExplore(fs::directory_entry(root),deleteItem);
+	if(status){
+		std::cout<<"Something went wrong in the deletion phase"<<std::endl;
+		fs::copy(updatePath,root,options,ec);
+		if(ec){
+			std::cerr << "Error restoring files: " << ec.message() << "\n";
+		}
+		return 1;
+	}
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Copying files from: " << updatePath << " to: " << root << std::endl;
 	}
 
-	recursiveExplore(fs::directory_entry(updatePath),copyItem,root,updatePath);
+	status = recursiveExplore(fs::directory_entry(updatePath),copyItem,root,updatePath);
+	if(status){
+		std::cout<<"Something went wrong in the update phase"<<std::endl;
+		fs::copy(updatePath,root,options,ec);
+		if(ec){
+			std::cerr << "Error restoring files: " << ec.message() << "\n";
+		}
+		return 1;
+	}
 
 	if(flagMask & FLAGS::VERBOSE){
 		std::cout << "Cleaning up temporary files." << std::endl;
