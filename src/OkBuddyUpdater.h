@@ -25,6 +25,14 @@ enum FLAGS {
 
 namespace fs = std::filesystem;
 
+struct DirectoryNode {
+	fs::directory_entry entry;
+	std::function<void(const fs::directory_entry&, const fs::path&, const fs::path&)> action;
+	fs::path arg1 = "/";
+	fs::path arg2 = "/";
+	bool protectedFlag = false;
+};
+
 static uint32_t flagMask = 0;
 static std::string url = "";
 static std::unordered_map<fs::path, int> ignoreMap;
@@ -44,9 +52,9 @@ static size_t writeString(char* ptr, size_t size, size_t nmemb, void* stream);
 static uint32_t parseFlags(const char* flags);
 static std::vector<std::string>* parseArgList(char* args, std::vector<std::string>* argList = nullptr);
 static bool extractZip(const char* zipFile, fs::path destination);
-static void copyItem(const fs::directory_entry entry,const fs::path& to, const fs::path& from);
-static void deleteItem(const fs::directory_entry entry,const fs::path& none1,const fs::path& none2);
-static int recursiveExplore(const fs::directory_entry entry, const std::function<void(const fs::directory_entry,const fs::path, const fs::path)> action, const fs::path& arg1 = "/", const fs::path& arg2 = "/");
+static void copyItem(const fs::directory_entry entry,const fs::path& to,const fs::path& from);
+static void deleteItem(const fs::directory_entry entry,const fs::path& to,const fs::path& from);
+static int recursiveExplore(DirectoryNode& node);
 static int updateLoad(const std::string updatePath);
 extern "C" UPDATER_API int handleUpdate();
 

@@ -176,23 +176,32 @@ static void copyItem(const fs::directory_entry entry,const fs::path& to,const fs
 	}
 }
 
-static void deleteItem(const fs::directory_entry entry,const fs::path& none1,const fs::path& none2){
+static void deleteItem(const fs::directory_entry entry,const fs::path& to,const fs::path& from){
 	fs::remove(entry);
 }
 
-static int recursiveExplore(const fs::directory_entry entry, const std::function<void(const fs::directory_entry,const fs::path, const fs::path)> action, const fs::path& arg1, const fs::path& arg2){
-	for (const fs::directory_entry& child : fs::directory_iterator(entry))
+static int recursiveExplore(DirectoryNode& node){
+	for (const fs::directory_entry& childEntry : fs::directory_iterator(node.entry))
 	{
-		if(ignoreMap.find(child.path())==ignoreMap.end()){
-			if(child.is_directory()){
-				int status = recursiveExplore(child, action, arg1,arg2);
-				if(status){
+		DirectoryNode child = {
+			childEntry,
+			node.action,
+			node.arg1,
+			node.arg2
+		};
+
+		if(ignoreMap.find(child.entry.path())==ignoreMap.end()){
+			if(child.entry.is_directory()){
+				int status = recursiveExplore(child);
+				if(child.protectedFlag)
+					node.protectedFlag = true;
+				if(status)
 					return status;
-				}
 			}
 			//reach bottom then perform action going back up
 			try{
-				action(child,arg1,arg2);
+				if(!child.protectedFlag)
+					child.action(child.entry,child.arg1,child.arg2);
 				return 0;
 			}
 			catch(const std::runtime_error& e){
@@ -200,7 +209,11 @@ static int recursiveExplore(const fs::directory_entry entry, const std::function
 				return 1;
 			}
 		}
+		else{
+			node.protectedFlag = true;
+		}
 	}
+	return 0;
 }
 
 static int updateLoad(const std::string updatePath)
@@ -227,7 +240,13 @@ static int updateLoad(const std::string updatePath)
 		std::cout << "Backing up files to: " << backupPath << std::endl;
 	}
 
-	status = recursiveExplore(fs::directory_entry(root),copyItem,backupPath,root);
+	DirectoryNode rootNode = {
+		fs::directory_entry(root),
+		copyItem,
+		backupPath,
+		root
+	};
+	status = recursiveExplore(rootNode);
 	if(status){
 		std::cout<<"Something went wrong in backup phase"<<std::endl;
 	}
@@ -236,7 +255,11 @@ static int updateLoad(const std::string updatePath)
 		std::cout << "Removing files from: " << root << std::endl;
 	}
 
-	status = recursiveExplore(fs::directory_entry(root),deleteItem);
+	rootNode = {
+		fs::directory_entry(root),
+		deleteItem
+	};
+	status = recursiveExplore(rootNode);
 	if(status){
 		std::cout<<"Something went wrong in the deletion phase"<<std::endl;
 		fs::copy(updatePath,root,options,ec);
@@ -250,7 +273,13 @@ static int updateLoad(const std::string updatePath)
 		std::cout << "Copying files from: " << updatePath << " to: " << root << std::endl;
 	}
 
-	status = recursiveExplore(fs::directory_entry(updatePath),copyItem,root,updatePath);
+	rootNode = {
+		fs::directory_entry(updatePath),
+		copyItem,
+		root,
+		updatePath
+	};
+	status = recursiveExplore(rootNode);
 	if(status){
 		std::cout<<"Something went wrong in the update phase"<<std::endl;
 		fs::copy(updatePath,root,options,ec);
