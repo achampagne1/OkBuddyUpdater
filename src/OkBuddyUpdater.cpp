@@ -199,10 +199,13 @@ static int recursiveExplore(DirectoryNode& node){
 					return status;
 			}
 			//reach bottom then perform action going back up
+			if(flagMask & FLAGS::VERBOSE){
+				std::cout<<child.entry<<std::endl;
+			}
+
 			try{
 				if(!child.protectedFlag)
 					child.action(child.entry,child.arg1,child.arg2);
-				return 0;
 			}
 			catch(const std::runtime_error& e){
 				std::cerr<<"Error during copy: " << e.what() <<std::endl;
